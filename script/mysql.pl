@@ -27,7 +27,7 @@ print "\n";
 
 my $dbh = eval {
 	DBI->connect(
-		"dbi:mysqlPP:database=$database;hostname=$option{h}",
+		"dbi:mysqlPP:database=$database;hostname=$option{h};port=$option{P}",
 		$option{u}, $password, {
 			RaiseError => 1, PrintError => 0
 	});

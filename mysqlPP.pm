@@ -5,7 +5,7 @@ use DBI;
 use Carp;
 use vars qw($VERSION $err $errstr $state $drh);
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 $err = 0;
 $errstr = '';
 $state = undef;
@@ -30,7 +30,8 @@ sub driver
 }
 
 
-sub _parse_dsn($$$) {
+sub _parse_dsn
+{
 	my $class = shift;
 	my ($dsn, $args) = @_;
 	my($hash, $var, $val);
@@ -71,7 +72,7 @@ sub _parse_dsn($$$) {
 }
 
 
-sub _parse_dsn_host ($$)
+sub _parse_dsn_host
 {
 	my($class, $dsn) = @_;
 	my $hash = $class->_parse_dsn($dsn, ['host', 'port']);
@@ -107,11 +108,13 @@ sub connect
 	eval {
 		my $mysql = Net::MySQL->new(
 			hostname => $data_source_info->{host},
+			port     => $data_source_info->{port},
 			database => $data_source_info->{database},
 			user     => $user,
 			password => $password,
 		);
 		$dbh->STORE(mysqlpp_connection => $mysql);
+		$dbh->STORE(thread_id => $mysql->{server_thread_id});
 	};
 	if ($@) {
 		return $dbh->DBI::set_err(1, $@);
@@ -171,7 +174,64 @@ sub rollback
 }
 
 
-sub table_info {}
+sub tables
+{
+	my $dbh = shift;
+	my @args = @_;
+	my $mysql = $dbh->FETCH('mysqlpp_connection');
+
+	my @database_list;
+	eval {
+		$mysql->query('show tables');
+		die $mysql->get_error_message if $mysql->is_error;
+		if ($mysql->has_selected_record) {
+			my $record = $mysql->create_record_iterator;
+			while (my $db_name = $record->each) {
+				push @database_list, $db_name->[0];
+			}
+		}
+	};
+	if ($@) {
+		warn $mysql->get_error_message;
+	}
+	return $mysql->is_error
+		? undef
+		: @database_list;
+}
+
+
+sub _ListDBs
+{
+	my $dbh = shift;
+	my @args = @_;
+	my $mysql = $dbh->FETCH('mysqlpp_connection');
+
+	my @database_list;
+	eval {
+		$mysql->query('show databases');
+		die $mysql->get_error_message if $mysql->is_error;
+		if ($mysql->has_selected_record) {
+			my $record = $mysql->create_record_iterator;
+			while (my $db_name = $record->each) {
+				push @database_list, $db_name->[0];
+			}
+		}
+	};
+	if ($@) {
+		warn $mysql->get_error_message;
+	}
+	return $mysql->is_error
+		? undef
+		: @database_list;
+}
+
+
+sub _ListTables
+{
+	my $dbh = shift;
+	return $dbh->tables;
+}
+
 
 sub disconnect
 {
@@ -185,7 +245,7 @@ sub FETCH
 	my $key = shift;
 
 	return 1 if $key eq 'AutoCommit';
-	return $dbh->{$key} if $key =~ /^mysqlpp_/;
+	return $dbh->{$key} if $key =~ /^(?:mysqlpp_.*|thread_id|mysql_insertid)$/;
 	return $dbh->SUPER::FETCH($key);
 }
 
@@ -199,7 +259,7 @@ sub STORE
 		die "Can't disable AutoCommit" unless $value;
 		return 1;
 	}
-	elsif ($key =~ /^mysqlpp_/) {
+	elsif ($key =~ /^(?:mysqlpp_.*|thread_id|mysql_insertid)$/) {
 		$dbh->{$key} = $value;
 		return 1;
 	}
@@ -259,6 +319,8 @@ sub execute
 
 		my $dbh = $sth->{Database};
 		$dbh->STORE(mysqlpp_insertid => $mysql->get_insert_id);
+		$dbh->STORE(mysql_insertid => $mysql->get_insert_id);
+
 		$sth->{mysqlpp_rows} = $mysql->get_affected_rows_length;
 		if ($mysql->has_selected_record) {
 			my $record = $mysql->create_record_iterator;
@@ -469,6 +531,7 @@ I's more formal approach:
 
     $dsn = "dbi:mysqlPP:$database";
     $dsn = "dbi:mysqlPP:database=$database;host=$hostname";
+    $dsn = "dbi:mysqlPP:database=$database;host=$hostname;port=$port";
 
     $dbh = DBI->connect($dsn, $user, $password);
 
@@ -482,7 +545,53 @@ The hostname, if not specified or specified as '', will default to an
 MySQL daemon running on the local machine on the default port
 for the INET socket.
 
+=item port
+
+Port where MySQL daemon listens to. default is 3306.
+
 =back
+
+=back
+
+=head2 MetaData Method
+
+=over 4
+
+=item B<tables>
+
+    @names = $dbh->tables;
+
+Returns a list of table and view names, possibly including a schema prefix. This list should include all tables that can be used in a "SELECT" statement without further qualification.
+
+=back
+
+=head2 Private MetaData Methods
+
+=over 4
+
+=item ListDBs
+
+    @dbs = $dbh->func('_ListDBs');
+
+Returns a list of all databases managed by the MySQL daemon.
+
+=item ListTables
+
+B<WARNING>: This method is obsolete due to DBI's $dbh->tables().
+
+    @tables = $dbh->func('_ListTables');
+
+Once connected to the desired database on the desired mysql daemon with the "DBI-"connect()> method, we may extract a list of the tables that have been created within that database.
+
+"ListTables" returns an array containing the names of all the tables present within the selected database. If no tables have been created, an empty list is returned.
+
+    @tables = $dbh->func('_ListTables');
+    foreach $table (@tables) {
+        print "Table: $table\n";
+    }
+
+=back
+
 
 =head1 DATABASE HANDLES
 
@@ -490,6 +599,7 @@ The DBD::mysqlPP driver supports the following attributes of database
 handles (read only):
 
   $insertid = $dbh->{'mysqlpp_insertid'};
+  $insertid = $dbh->{'mysql_insertid'};
 
 =head1 STATEMENT HANDLES
 
@@ -500,7 +610,7 @@ of attributes. You access these by using, for example,
 
 =over
 
-=item mysqlpp_insertid
+=item mysqlpp_insertid/mysql_insertid
 
 MySQL has the ability to choose unique key values automatically. If this
 happened, the new ID will be stored in this attribute. An alternative
@@ -574,8 +684,6 @@ Cannot be used.
 
 =over 4
 
-=item * port
-
 =item * msql_configfile
 
 =item * mysql_compression
@@ -588,13 +696,14 @@ Cannot be used.
 
 =head2 Private MetaData Methods
 
-Cannot be used.
+These methods cannot be used for $drh.
 
 =over 4
 
 =item * ListDBs
 
 =item * ListTables
+
 
 =back
 
@@ -621,12 +730,6 @@ Cannot be used
 =over 4
 
 =item * $dbh->{info}
-
-=item * $dbh->{thread_id}
-
-=item * $dbh->{mysql_insertid}
-
-I<mysql_insertid> can be referred to instead at I<mysqlpp_insertid>.
 
 =back
 

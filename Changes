@@ -8,3 +8,11 @@ Revision history for Perl extension DBD::mysqlPP.
 	- Add pod section 'DIFFERENCE FROM "DBD::mysql"'.
 	- Surely quote() by execute() method.
 	- fetchrow_hashref() method was worked.
+
+0.03  Mon Apr 15 19:05:17 JST 2002
+	- Enable 'port' attribute.
+	- Enable '_ListDBs' private metadata method.
+	- Enable '_ListTables' private metadata method.
+	- Enable tables() method.
+	- Enable  'thread_id' attribute.
+	- Enable 'mysql_insertid' attribute.
