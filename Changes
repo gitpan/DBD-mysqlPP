@@ -1,0 +1,10 @@
+Revision history for Perl extension DBD::mysqlPP.
+
+0.01  Wed Mar 27 04:18:01 JST 2002
+	- original version; created by h2xs 1.21 with options
+		-X -n DBD::mysqlPP
+
+0.02  Tue Apr  2 21:59:36 JST 2002
+	- Add pod section 'DIFFERENCE FROM "DBD::mysql"'.
+	- Surely quote() by execute() method.
+	- fetchrow_hashref() method was worked.
