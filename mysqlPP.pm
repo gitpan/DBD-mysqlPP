@@ -5,7 +5,7 @@ use DBI;
 use Carp;
 use vars qw($VERSION $err $errstr $state $drh);
 
-$VERSION = '0.03';
+$VERSION = '0.04';
 $err = 0;
 $errstr = '';
 $state = undef;
@@ -112,6 +112,7 @@ sub connect
 			database => $data_source_info->{database},
 			user     => $user,
 			password => $password,
+			debug    => $attrhash->{protocol_dump},
 		);
 		$dbh->STORE(mysqlpp_connection => $mysql);
 		$dbh->STORE(thread_id => $mysql->{server_thread_id});
@@ -139,6 +140,45 @@ $DBD::mysqlPP::db::imp_data_size = 0;
 use strict;
 
 
+# Patterns referred to 'mysql_sub_escape_string()' of libmysql.c
+sub quote
+{
+	my $dbh = shift;
+	my ($statement, $type) = @_;
+	return 'NULL' unless defined $statement;
+
+	for ($statement) {
+		s/\\/\\\\/g;
+		s/\0/\\0/g;
+		s/\n/\\n/g;
+		s/\r/\\r/g;
+		s/'/\\'/g;
+		s/"/\\"/g;
+		s/\x1a/\\Z/g;
+	}
+	return "'$statement'";
+}
+
+sub _count_param
+{
+	my @statement = split //, shift;
+	my $num = 0;
+
+	while (defined(my $c = shift @statement)) {
+		if ($c eq '"' || $c eq "'") {
+			my $end = $c;
+			while (defined(my $c = shift @statement)) {
+				last if $c eq $end;
+				@statement = splice @statement, 2 if $c eq '\\';
+			}
+		}
+		elsif ($c eq '?') {
+			$num++;
+		}
+	}
+	return $num;
+}
+
 sub prepare
 {
 	my $dbh = shift;
@@ -149,7 +189,7 @@ sub prepare
 	});
 	$sth->STORE(mysqlpp_handle => $dbh->FETCH('mysqlpp_connection'));
 	$sth->STORE(mysqlpp_params => []);
-	$sth->STORE(NUM_OF_PARAMS => ($statement =~ tr/?//));
+	$sth->STORE(NUM_OF_PARAMS => _count_param($statement));
 	$sth;
 }
 
@@ -293,6 +333,7 @@ sub bind_param
 	my $params = $sth->FETCH('mysqlpp_param');
 	$params->[$index - 1] = $value;
 }
+
 
 
 sub execute
@@ -801,7 +842,7 @@ L<Net::MySQL>, L<DBD::mysql>
 
 =head1 AUTHORS
 
-Hiroyuki OYAMA E<lt>oyama@crayfish.co.jpE<gt>
+Hiroyuki OYAMA E<lt>oyama@module.jpE<gt>
 
 =head1 COPYRIGHT AND LICENCE
 

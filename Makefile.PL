@@ -5,8 +5,8 @@ WriteMakefile(
 	'VERSION_FROM'	=> 'mysqlPP.pm',
 	'PREREQ_PM'		=> {
 		'DBI'        => 1.0,
-		'Net::MySQL' => 0.0.1,
+		'Net::MySQL' => 0.08,
 	},
 	($] >= 5.005 ?
-	(AUTHOR     => 'Hiroyuki OYAMA <oyama@crayfish.co.jp>') : ()),
+	(AUTHOR     => 'Hiroyuki OYAMA <oyama@module.jp>') : ()),
 );
