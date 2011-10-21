@@ -1,7 +1,8 @@
 Changes
 Makefile.PL
-MANIFEST
+MANIFEST			This list of files
 mysqlPP.pm
 README
 script/mysql.pl
 t/0.base.t
+META.yml                                 Module meta-data (added by MakeMaker)
