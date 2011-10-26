@@ -5,7 +5,7 @@ use DBI;
 use Carp;
 use vars qw($VERSION $err $errstr $state $drh);
 
-$VERSION = '0.05';
+$VERSION = '0.06';
 $err = 0;
 $errstr = '';
 $state = undef;
@@ -346,13 +346,8 @@ sub execute
 	if (@$params != $num_param) {
 		# ...
 	}
-    my @splitted_statements = split qr/(\?)/, $sth->{Statement};
-    my $i = 0;
-	for my $item ( @splitted_statements ) {
-        my $dbh = $sth->{Database};
-        $item = $dbh->quote($params->[$i++]) if ( $item eq '?' );
-	}
-    my $statement = join '', @splitted_statements;
+    my $statement = _mysqlpp_bind_statement($sth, $params);
+    #warn $statement;
 
 	my $mysql = $sth->FETCH('mysqlpp_handle');
 	my $result = eval {
@@ -441,6 +436,25 @@ sub STORE
 	return $dbh->SUPER::STORE($key, $value);
 }
 
+sub _mysqlpp_bind_statement {
+    my ($sth, $params) = @_;
+
+    my @splitted = split qr/((?:\?)|(?:\bLIMIT\b))/i, $sth->{Statement};
+    my $param_idx = 0;
+    my $limit_found = 0;
+    for (my $i=0; $i<@splitted; $i++ ) {
+        my $dbh = $sth->{Database};
+        if ( $splitted[$i] eq '?' && exists $params->[$param_idx] ) {
+            my $value = $limit_found ? $params->[$param_idx++] : $dbh->quote($params->[$param_idx++]); #bind for LIMIT isn't need quote
+            $splitted[$i] = $value;
+            $limit_found = 0 if ( exists $splitted[$i + 1] && $splitted[$i + 1] !~ qr/\b,\b/ );# qr/\b,\b/ is for LIMIT ?, ?
+        }
+        elsif( $splitted[$i] =~ qr/\bLIMIT\b/i ) {
+            $limit_found = 1;
+        }
+	}
+    return join '', @splitted;
+}
 
 sub DESTROY
 {
@@ -675,32 +689,6 @@ To install this module type the following:
    make
    make test
    make install
-
-=head1 SUPPORT OPERATING SYSTEM
-
-This module has been tested on these OSes.
-
-=over 4
-
-=item * MacOS 9.x
-
-with MacPerl5.6.1r.
-
-=item * MacOS X
-
-with perl5.6.0 build for darwin.
-
-=item * Windows2000
-
-with ActivePerl5.6.1 build631.
-
-=item * FreeBSD 3.4 and 4.x
-
-with perl5.6.1 build for i386-freebsd.
-
-with perl5.005_03 build for i386-freebsd.
-
-=back
 
 =head1 DEPENDENCIES
 
